@@ -15,17 +15,22 @@ flutter create --platforms=android .
 
 ```bash
 flutter pub get
-flutter run --dart-define=OMDB_API_KEY=YOUR_KEY
+cp config/normal.example.json config/normal.json
+flutter run --dart-define-from-file=config/normal.json
 ```
 
 Advanced mode routes movie requests and authenticated mutations through the backend:
 
 ```bash
-flutter run \
-  --dart-define=ADVANCED_MODE=true \
-  --dart-define=BACKEND_BASE_URL=https://example.com/api/v1 \
-  --dart-define=BACKEND_CERT_SHA256=SERVER_CERTIFICATE_SHA256
+cd ../backend
+npm run certificate:fingerprint -- \
+  https://api.example.com/api/v1 \
+  ../normal_app/config/advanced.json
+cd ../normal_app
+flutter run --dart-define-from-file=config/advanced.json
 ```
+
+The generated configuration pins the live server certificate. Remote advanced mode rejects HTTP, a missing pin or an invalid SHA-256 fingerprint. The real configuration files are ignored by Git.
 
 ## Included requirements
 

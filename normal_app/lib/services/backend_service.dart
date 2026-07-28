@@ -19,22 +19,30 @@ class BackendService implements MovieService {
         ),
       ) {
     final uri = Uri.parse(AppConfig.backendBaseUrl);
-    if (uri.scheme != 'https' &&
-        uri.host != 'localhost' &&
-        uri.host != '10.0.2.2') {
+    final isLocal =
+        uri.host == 'localhost' ||
+        uri.host == '127.0.0.1' ||
+        uri.host == '10.0.2.2';
+    if (uri.scheme != 'https' && !isLocal) {
       throw StateError('The advanced backend must use HTTPS.');
     }
-    _dio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: HttpClient.new,
-      validateCertificate: (certificate, _, __) {
-        final expected = AppConfig.backendCertificateSha256
-            .replaceAll(':', '')
-            .toLowerCase();
-        if (expected.isEmpty) return true;
+    final expected = AppConfig.backendCertificateSha256
+        .replaceAll(':', '')
+        .toLowerCase();
+    if (!isLocal && expected.isEmpty) {
+      throw StateError('The backend certificate fingerprint is required.');
+    }
+    if (expected.isNotEmpty && !RegExp(r'^[a-f0-9]{64}$').hasMatch(expected)) {
+      throw StateError('The backend certificate fingerprint is invalid.');
+    }
+    final adapter = IOHttpClientAdapter(createHttpClient: HttpClient.new);
+    if (expected.isNotEmpty) {
+      adapter.validateCertificate = (certificate, _, __) {
         final actual = sha256.convert(certificate?.der ?? []).toString();
         return actual == expected;
-      },
-    );
+      };
+    }
+    _dio.httpClientAdapter = adapter;
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {

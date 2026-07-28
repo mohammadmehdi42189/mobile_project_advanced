@@ -2,16 +2,22 @@ import nodemailer from "nodemailer";
 import { config } from "./config.js";
 import { AppError } from "./errors.js";
 
-export async function sendPasswordReset(email: string, token: string) {
+export function createEmailTransport() {
   if (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASSWORD) {
     throw new AppError(503, "Email service is not configured");
   }
-  const transport = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: config.SMTP_HOST,
     port: config.SMTP_PORT,
-    secure: config.SMTP_PORT === 465,
-    auth: { user: config.SMTP_USER, pass: config.SMTP_PASSWORD }
+    secure: config.SMTP_SECURE,
+    requireTLS: config.SMTP_REQUIRE_TLS,
+    auth: { user: config.SMTP_USER, pass: config.SMTP_PASSWORD },
+    tls: { minVersion: "TLSv1.2" }
   });
+}
+
+export async function sendPasswordReset(email: string, token: string) {
+  const transport = createEmailTransport();
   await transport.sendMail({
     from: config.SMTP_FROM,
     to: email,

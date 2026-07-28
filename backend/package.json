@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup-env.mjs",
+    "config:check": "tsx src/verify-config.ts",
+    "certificate:fingerprint": "node scripts/certificate-fingerprint.mjs",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",

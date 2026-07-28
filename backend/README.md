@@ -22,15 +22,18 @@ This directory contains the independent backend required by the advanced project
 ## Run locally
 
 ```bash
-cp .env.example .env
 npm install
+npm run setup
+npm run config:check
 npm run db:generate
 npm run db:push
 npm run db:seed
 npm run dev
 ```
 
-Set `OMDB_API_KEY` in `.env`. The backend uses cached media when the external service is temporarily unavailable. Configure the SMTP variables for password recovery.
+`npm run setup` creates the ignored `.env` file, generates a strong JWT secret and securely asks for the OMDb and SMTP settings. Existing values are preserved when the setup is run again. `npm run config:check` validates the OMDb key and SMTP connection without printing secrets.
+
+For CI or a hosting service, configure the variables from `.env.example` in the platform secret manager. Production startup rejects a missing OMDb key, incomplete SMTP credentials, a weak JWT secret or unrestricted CORS.
 
 Default seeded administrator:
 
@@ -41,11 +44,21 @@ Change these credentials before deployment.
 
 ## Mobile integration
 
-Configure one base URL in the mobile project:
+For local development, configure the emulator URL:
 
 ```text
 http://10.0.2.2:3000/api/v1
 ```
+
+For a deployed HTTPS backend, create the ignored Flutter configuration and certificate pin directly from the live server:
+
+```bash
+npm run certificate:fingerprint -- \
+  https://api.example.com/api/v1 \
+  ../normal_app/config/advanced.json
+```
+
+Regenerate this file whenever the server certificate is renewed.
 
 For protected routes, send:
 
