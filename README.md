@@ -2,16 +2,15 @@
 
 This repository contains both project models in separate top-level directories:
 
-- [`normal_app/`](normal_app/README.md): Flutter mobile application for the normal model
+- [`normal_app/`](normal_app/README.md): Flutter mobile application
 - [`backend/`](backend/README.md): Node.js backend for the advanced model
 
-The mobile application can currently run in normal mode and communicate directly with OMDb. The backend remains independently deployable for advanced client-server integration.
+The Flutter application supports two selectable data modes:
 
-## Structure
+- Normal mode communicates directly with OMDb and stores personal data locally.
+- Advanced mode communicates with the custom backend, stores its JWT securely and supports certificate pinning.
 
 ```text
 backend/      Advanced API, database and server-side logic
-normal_app/   Normal Flutter application and local persistence
+normal_app/   Flutter application and local persistence
 ```
-
-Each part has its own setup instructions and dependencies.

@@ -1,6 +1,6 @@
 # Advanced Backend
 
-This directory contains the independent backend required by the advanced project model. The future mobile application should stay outside `backend/` and communicate only through `/api/v1`, which keeps both parts easy to merge and replace.
+This directory contains the independent backend required by the advanced project model. The Flutter application is kept in `normal_app/` and communicates with this service through `/api/v1` when advanced mode is enabled.
 
 ## Features
 
@@ -11,6 +11,10 @@ This directory contains the independent backend required by the advanced project
 - Personal watchlist and watch status
 - Ratings, comments and activity statistics
 - Personal lists and comment reporting
+- Seasons and episode details
+- Rating distribution and complete activity statistics
+- Email-based password recovery
+- Profile bio and avatar metadata
 - Administrator user, comment and system management
 - Request validation, rate limiting and standard JSON errors
 - Swagger UI at `/docs`
@@ -26,7 +30,7 @@ npm run db:seed
 npm run dev
 ```
 
-Set `OMDB_API_KEY` in `.env`. The backend uses cached media when the external service is temporarily unavailable.
+Set `OMDB_API_KEY` in `.env`. The backend uses cached media when the external service is temporarily unavailable. Configure the SMTP variables for password recovery.
 
 Default seeded administrator:
 
@@ -60,6 +64,8 @@ The API response format is JSON. Errors use this stable shape:
   }
 }
 ```
+
+Swagger UI is available at `/docs`.
 
 ## Tests
 

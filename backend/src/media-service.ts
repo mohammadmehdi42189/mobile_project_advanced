@@ -13,6 +13,9 @@ type OmdbMedia = {
   Actors?: string;
   imdbRating?: string;
   totalSeasons?: string;
+  Runtime?: string;
+  Director?: string;
+  Country?: string;
   Response: string;
   Error?: string;
 };
@@ -29,10 +32,43 @@ function normalized(item: OmdbMedia) {
     posterUrl: item.Poster && item.Poster !== "N/A" ? item.Poster : null,
     genres: item.Genre && item.Genre !== "N/A" ? item.Genre : null,
     cast: item.Actors && item.Actors !== "N/A" ? item.Actors : null,
+    director: item.Director && item.Director !== "N/A" ? item.Director : null,
+    country: item.Country && item.Country !== "N/A" ? item.Country : null,
+    runtimeMinutes: Number.parseInt(item.Runtime ?? "") || null,
     imdbRating: Number.parseFloat(item.imdbRating ?? "") || null,
     totalSeasons: Number.parseInt(item.totalSeasons ?? "") || null,
     rawJson: JSON.stringify(item),
     cachedAt: new Date()
+  };
+}
+
+export async function findSeason(id: string, season: number) {
+  const data = await request({ i: id, Season: String(season) }) as {
+    Title?: string;
+    Season?: string;
+    totalSeasons?: string;
+    Episodes?: Array<{
+      imdbID?: string;
+      Title?: string;
+      Episode?: string;
+      Released?: string;
+      imdbRating?: string;
+    }>;
+    Response: string;
+    Error?: string;
+  };
+  if (data.Response === "False") throw new AppError(404, data.Error ?? "Season not found");
+  return {
+    title: data.Title ?? "",
+    season: Number(data.Season ?? season),
+    totalSeasons: Number(data.totalSeasons ?? 0),
+    episodes: (data.Episodes ?? []).map(episode => ({
+      id: episode.imdbID ?? "",
+      title: episode.Title ?? "",
+      episode: Number(episode.Episode ?? 0),
+      released: episode.Released && episode.Released !== "N/A" ? episode.Released : null,
+      rating: Number.parseFloat(episode.imdbRating ?? "") || null
+    }))
   };
 }
 
@@ -60,12 +96,18 @@ export async function findMedia(id: string) {
   }
 }
 
-export async function searchMedia(query: string, page: number, type?: string) {
+export async function searchMedia(
+  query: string,
+  page: number,
+  type?: string,
+  year?: number
+) {
   try {
     const data = (await request({
       s: query,
       page: String(page),
-      ...(type ? { type } : {})
+      ...(type ? { type } : {}),
+      ...(year ? { y: String(year) } : {})
     })) as { Search?: OmdbMedia[]; totalResults?: string; Response: string; Error?: string };
     if (data.Response === "False") return { items: [], total: 0, page };
     return {

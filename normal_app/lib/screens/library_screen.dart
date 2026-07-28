@@ -52,7 +52,9 @@ class LibraryScreen extends StatelessWidget {
         media: items[index],
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => DetailsScreen(mediaId: items[index].id)),
+          MaterialPageRoute(
+            builder: (_) => DetailsScreen(mediaId: items[index].id),
+          ),
         ),
       ),
     );

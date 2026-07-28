@@ -64,4 +64,47 @@ class LocalStore {
       jsonEncode(items.map((item) => item.toJson()).toList()),
     );
   }
+
+  Future<Map<int, double>> ratingDistribution(String mediaId) async {
+    final result = <int, int>{};
+    for (final user in await users()) {
+      final data = await userData(user.id);
+      final value = (data['ratings'] as Map<String, dynamic>? ?? {})[mediaId];
+      if (value is num) {
+        final bucket = (value.toDouble() * 2).round().clamp(1, 10).toInt();
+        result[bucket] = (result[bucket] ?? 0) + 1;
+      }
+    }
+    final total = result.values.fold<int>(0, (sum, count) => sum + count);
+    return {
+      for (var value = 1; value <= 10; value++)
+        value: total == 0 ? 0 : (result[value] ?? 0) * 100 / total,
+    };
+  }
+
+  Future<List<Review>> reviewsForMedia(String mediaId) async {
+    final result = <Review>[];
+    for (final user in await users()) {
+      final data = await userData(user.id);
+      final reviews = (data['reviews'] as List<dynamic>? ?? [])
+          .cast<Map<String, dynamic>>()
+          .map(Review.fromJson)
+          .where((review) => review.mediaId == mediaId);
+      result.addAll(
+        reviews.map(
+          (review) => Review(
+            id: review.id,
+            mediaId: review.mediaId,
+            text: review.text,
+            createdAt: review.createdAt,
+            spoiler: review.spoiler,
+            userName: user.name,
+            userAvatar: user.avatarPath,
+          ),
+        ),
+      );
+    }
+    result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return result;
+  }
 }

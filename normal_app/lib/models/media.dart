@@ -5,6 +5,8 @@ class MediaSummary {
     required this.type,
     this.year,
     this.poster,
+    this.genre,
+    this.runtimeMinutes,
   });
 
   final String id;
@@ -12,22 +14,28 @@ class MediaSummary {
   final String type;
   final String? year;
   final String? poster;
+  final String? genre;
+  final int? runtimeMinutes;
 
   factory MediaSummary.fromJson(Map<String, dynamic> json) => MediaSummary(
-        id: json['imdbID'] as String,
-        title: json['Title'] as String? ?? '',
-        type: json['Type'] as String? ?? 'movie',
-        year: json['Year'] as String?,
-        poster: _nullable(json['Poster']),
-      );
+    id: (json['imdbID'] ?? json['id']) as String,
+    title: (json['Title'] ?? json['title']) as String? ?? '',
+    type: (json['Type'] ?? json['type']) as String? ?? 'movie',
+    year: (json['Year'] ?? json['year'])?.toString(),
+    poster: nullableText(json['Poster'] ?? json['posterUrl']),
+    genre: nullableText(json['Genre'] ?? json['genres']),
+    runtimeMinutes: parseRuntime(json),
+  );
 
   Map<String, dynamic> toJson() => {
-        'imdbID': id,
-        'Title': title,
-        'Type': type,
-        'Year': year,
-        'Poster': poster,
-      };
+    'imdbID': id,
+    'Title': title,
+    'Type': type,
+    'Year': year,
+    'Poster': poster,
+    'Genre': genre,
+    'runtimeMinutes': runtimeMinutes,
+  };
 }
 
 class MediaDetails extends MediaSummary {
@@ -37,8 +45,9 @@ class MediaDetails extends MediaSummary {
     required super.type,
     super.year,
     super.poster,
+    super.genre,
+    super.runtimeMinutes,
     this.plot,
-    this.genre,
     this.director,
     this.actors,
     this.runtime,
@@ -48,7 +57,6 @@ class MediaDetails extends MediaSummary {
   });
 
   final String? plot;
-  final String? genre;
   final String? director;
   final String? actors;
   final String? runtime;
@@ -57,20 +65,38 @@ class MediaDetails extends MediaSummary {
   final int? totalSeasons;
 
   factory MediaDetails.fromJson(Map<String, dynamic> json) => MediaDetails(
-        id: json['imdbID'] as String,
-        title: json['Title'] as String? ?? '',
-        type: json['Type'] as String? ?? 'movie',
-        year: json['Year'] as String?,
-        poster: _nullable(json['Poster']),
-        plot: _nullable(json['Plot']),
-        genre: _nullable(json['Genre']),
-        director: _nullable(json['Director']),
-        actors: _nullable(json['Actors']),
-        runtime: _nullable(json['Runtime']),
-        country: _nullable(json['Country']),
-        imdbRating: _nullable(json['imdbRating']),
-        totalSeasons: int.tryParse(json['totalSeasons']?.toString() ?? ''),
-      );
+    id: (json['imdbID'] ?? json['id']) as String,
+    title: (json['Title'] ?? json['title']) as String? ?? '',
+    type: (json['Type'] ?? json['type']) as String? ?? 'movie',
+    year: (json['Year'] ?? json['year'])?.toString(),
+    poster: nullableText(json['Poster'] ?? json['posterUrl']),
+    plot: nullableText(json['Plot'] ?? json['plot']),
+    genre: nullableText(json['Genre'] ?? json['genres']),
+    director: nullableText(json['Director'] ?? json['director']),
+    actors: nullableText(json['Actors'] ?? json['cast']),
+    runtime: nullableText(
+      json['Runtime'] ??
+          (json['runtimeMinutes'] == null
+              ? null
+              : '${json['runtimeMinutes']} min'),
+    ),
+    runtimeMinutes: parseRuntime(json),
+    country: nullableText(json['Country'] ?? json['country']),
+    imdbRating: nullableText(json['imdbRating']),
+    totalSeasons: int.tryParse(json['totalSeasons']?.toString() ?? ''),
+  );
+
+  @override
+  Map<String, dynamic> toJson() => {
+    ...super.toJson(),
+    'Plot': plot,
+    'Director': director,
+    'Actors': actors,
+    'Runtime': runtime,
+    'Country': country,
+    'imdbRating': imdbRating,
+    'totalSeasons': totalSeasons,
+  };
 }
 
 class Episode {
@@ -89,15 +115,23 @@ class Episode {
   final String? rating;
 
   factory Episode.fromJson(Map<String, dynamic> json) => Episode(
-        id: json['imdbID'] as String? ?? '',
-        title: json['Title'] as String? ?? '',
-        episode: int.tryParse(json['Episode']?.toString() ?? '') ?? 0,
-        released: _nullable(json['Released']),
-        rating: _nullable(json['imdbRating']),
-      );
+    id: (json['imdbID'] ?? json['id']) as String? ?? '',
+    title: (json['Title'] ?? json['title']) as String? ?? '',
+    episode:
+        int.tryParse((json['Episode'] ?? json['episode'])?.toString() ?? '') ??
+        0,
+    released: nullableText(json['Released'] ?? json['released']),
+    rating: nullableText(json['imdbRating'] ?? json['rating']),
+  );
 }
 
-String? _nullable(dynamic value) {
+String? nullableText(dynamic value) {
   final text = value?.toString();
   return text == null || text == 'N/A' || text.isEmpty ? null : text;
+}
+
+int? parseRuntime(Map<String, dynamic> json) {
+  final raw =
+      json['runtimeMinutes'] ?? json['Runtime']?.toString().split(' ').first;
+  return int.tryParse(raw?.toString() ?? '');
 }

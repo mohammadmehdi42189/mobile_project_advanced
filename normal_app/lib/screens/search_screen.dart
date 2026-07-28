@@ -25,8 +25,10 @@ class SearchScreen extends StatelessWidget {
           if (state.error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(state.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              child: Text(
+                state.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           if (state.busy) const LinearProgressIndicator(),
           Expanded(

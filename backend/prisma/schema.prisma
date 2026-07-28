@@ -17,12 +17,15 @@ enum WatchStatus {
   WATCHING
   COMPLETED
   DROPPED
+  FAVORITE
 }
 
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
   name         String
+  bio          String        @default("")
+  avatarUrl    String?
   passwordHash String
   role         Role          @default(USER)
   active       Boolean       @default(true)
@@ -32,6 +35,7 @@ model User {
   comments     Comment[]
   lists        PersonalList[]
   reports      Report[]
+  episodeProgress EpisodeProgress[]
 }
 
 model Media {
@@ -43,6 +47,9 @@ model Media {
   posterUrl   String?
   genres      String?
   cast        String?
+  director    String?
+  country     String?
+  runtimeMinutes Int?
   imdbRating  Float?
   totalSeasons Int?
   rawJson     String?
@@ -51,6 +58,7 @@ model Media {
   ratings     Rating[]
   comments    Comment[]
   listItems   ListItem[]
+  episodeProgress EpisodeProgress[]
 }
 
 model WatchItem {
@@ -83,6 +91,7 @@ model Comment {
   userId    String
   mediaId   String
   text      String
+  spoiler   Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
@@ -96,6 +105,8 @@ model PersonalList {
   createdAt DateTime   @default(now())
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     ListItem[]
+
+  @@unique([userId, name])
 }
 
 model ListItem {
@@ -120,4 +131,29 @@ model Report {
   comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, commentId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model EpisodeProgress {
+  id        String   @id @default(cuid())
+  userId    String
+  mediaId   String
+  season    Int
+  episode   Int
+  watchedAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media     Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId, season, episode])
+  @@index([userId, mediaId])
 }

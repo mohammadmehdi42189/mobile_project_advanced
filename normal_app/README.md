@@ -1,6 +1,6 @@
 # Normal Mobile Application
 
-This branch contains only the normal project model. It is a Flutter application that communicates directly with OMDb and stores user activity locally.
+This directory contains the Flutter client for both project models.
 
 ## Run
 
@@ -18,6 +18,15 @@ flutter pub get
 flutter run --dart-define=OMDB_API_KEY=YOUR_KEY
 ```
 
+Advanced mode routes movie requests and authenticated mutations through the backend:
+
+```bash
+flutter run \
+  --dart-define=ADVANCED_MODE=true \
+  --dart-define=BACKEND_BASE_URL=https://example.com/api/v1 \
+  --dart-define=BACKEND_CERT_SHA256=SERVER_CERTIFICATE_SHA256
+```
+
 ## Included requirements
 
 - Local registration, login, persistent session and profile editing
@@ -31,5 +40,11 @@ flutter run --dart-define=OMDB_API_KEY=YOUR_KEY
 - Local persistence and cached search results
 - Cached posters, loading states and network error messages
 - Persian right-to-left Material 3 interface
+- Popular, new, highly rated and suggested media sections
+- Per-season episode tracking and color-coded progress
+- Rating distribution, watch time and favorite-genre statistics
+- Full add/remove/delete management for custom lists
+- Normal direct-OMDb mode and advanced backend mode
+- Secure backend token storage and certificate pinning support
 
-The advanced backend remains on the `main` branch. This normal implementation is intentionally published on a separate branch and is not merged.
+The backend is available in the repository's `backend/` directory.

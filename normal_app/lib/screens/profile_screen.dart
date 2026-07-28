@@ -33,9 +33,11 @@ class ProfileScreen extends StatelessWidget {
         children: [
           const CircleAvatar(radius: 46, child: Icon(Icons.person, size: 50)),
           const SizedBox(height: 12),
-          Text(user.name,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            user.name,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           Text(user.email, textAlign: TextAlign.center),
           if (user.bio.isNotEmpty) Text(user.bio, textAlign: TextAlign.center),
           const SizedBox(height: 24),
@@ -49,9 +51,19 @@ class ProfileScreen extends StatelessWidget {
               _stat(
                 context,
                 'قسمت مشاهده‌شده',
-                '${state.watchedEpisodes.values.fold<int>(0, (sum, item) => sum + item)}',
+                '${state.totalWatchedEpisodes}',
               ),
-              _stat(context, 'میانگین امتیاز', state.averageRating.toStringAsFixed(1)),
+              _stat(
+                context,
+                'میانگین امتیاز',
+                state.averageRating.toStringAsFixed(1),
+              ),
+              _stat(
+                context,
+                'زمان تقریبی تماشا',
+                '${state.totalWatchMinutes ~/ 60} ساعت',
+              ),
+              _stat(context, 'ژانر موردعلاقه', state.favoriteGenre),
             ],
           ),
           const SizedBox(height: 24),
@@ -63,10 +75,30 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Text('فهرست‌های شخصی', style: Theme.of(context).textTheme.titleLarge),
           ...state.customLists.entries.map(
-            (entry) => ListTile(
-              leading: const Icon(Icons.playlist_play),
-              title: Text(entry.key),
-              trailing: Text('${entry.value.length} اثر'),
+            (entry) => Card(
+              child: ExpansionTile(
+                leading: const Icon(Icons.playlist_play),
+                title: Text(entry.key),
+                subtitle: Text('${entry.value.length} اثر'),
+                trailing: IconButton(
+                  onPressed: () => state.deleteList(entry.key),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+                children: entry.value
+                    .map(
+                      (mediaId) => ListTile(
+                        title: Text(
+                          state.savedMedia[mediaId]?.title ?? mediaId,
+                        ),
+                        trailing: IconButton(
+                          onPressed: () =>
+                              state.removeFromList(entry.key, mediaId),
+                          icon: const Icon(Icons.remove_circle_outline),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             ),
           ),
           ListTile(
@@ -80,19 +112,19 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _stat(BuildContext context, String title, String value) => Card(
-        child: SizedBox(
-          width: 150,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Text(value, style: Theme.of(context).textTheme.headlineMedium),
-                Text(title, textAlign: TextAlign.center),
-              ],
-            ),
-          ),
+    child: SizedBox(
+      width: 150,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(value, style: Theme.of(context).textTheme.headlineMedium),
+            Text(title, textAlign: TextAlign.center),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Future<void> _edit(BuildContext context, AppState state) async {
     final name = TextEditingController(text: state.user!.name);
@@ -104,8 +136,14 @@ class ProfileScreen extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'نام')),
-            TextField(controller: bio, decoration: const InputDecoration(labelText: 'درباره من')),
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'نام'),
+            ),
+            TextField(
+              controller: bio,
+              decoration: const InputDecoration(labelText: 'درباره من'),
+            ),
           ],
         ),
         actions: [
@@ -127,7 +165,10 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('فهرست جدید'),
-        content: TextField(controller: name, decoration: const InputDecoration(labelText: 'نام')),
+        content: TextField(
+          controller: name,
+          decoration: const InputDecoration(labelText: 'نام'),
+        ),
         actions: [
           FilledButton(
             onPressed: () {
