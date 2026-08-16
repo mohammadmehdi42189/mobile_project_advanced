@@ -34,9 +34,9 @@ The generated configuration pins the live server certificate. Remote advanced mo
 
 ## Included requirements
 
-- Local registration, login, persistent session and profile editing
-- Guest browsing and local password recovery
-- Duplicate email prevention and hashed local passwords
+- Local registration, login, expiring 1/7/30-day sessions and profile editing
+- Guest browsing and email-based password recovery in advanced mode
+- Duplicate email/username prevention and salted PBKDF2 local passwords
 - Debounced asynchronous movie and series search
 - Movie, series, season and episode details
 - Watch states, watched episodes and progress

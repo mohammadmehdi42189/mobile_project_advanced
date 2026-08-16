@@ -64,19 +64,36 @@ class BackendService implements MovieService {
     return _token != null;
   }
 
-  Future<LocalUser> register(String name, String email, String password) async {
+  Future<LocalUser> register(
+    String name,
+    String username,
+    String email,
+    String password, {
+    String bio = '',
+    String? avatarUrl,
+    int sessionDays = 30,
+  }) async {
     final response = await _post('/auth/register', {
       'name': name,
+      'username': username,
       'email': email,
       'password': password,
+      'bio': bio,
+      'avatarUrl': avatarUrl,
+      'sessionDays': sessionDays,
     });
     return _saveIdentity(response);
   }
 
-  Future<LocalUser> login(String email, String password) async {
+  Future<LocalUser> login(
+    String email,
+    String password, {
+    int sessionDays = 30,
+  }) async {
     final response = await _post('/auth/login', {
       'email': email,
       'password': password,
+      'sessionDays': sessionDays,
     });
     return _saveIdentity(response);
   }
@@ -114,17 +131,16 @@ class BackendService implements MovieService {
   Future<void> setWatchState(
     String mediaId,
     WatchState state,
-    int watchedEpisodes,
   ) async {
     await _put('/watchlist/$mediaId', {
       'status': switch (state) {
         WatchState.planned => 'PLANNED',
         WatchState.watching => 'WATCHING',
         WatchState.completed => 'COMPLETED',
-        WatchState.paused || WatchState.dropped => 'DROPPED',
+        WatchState.paused => 'PAUSED',
+        WatchState.dropped => 'DROPPED',
         WatchState.favorite => 'FAVORITE',
       },
-      'watchedEpisodes': watchedEpisodes,
     });
   }
 
@@ -143,7 +159,7 @@ class BackendService implements MovieService {
   }
 
   Future<void> rate(String mediaId, double value) async {
-    await _put('/ratings/$mediaId', {'value': (value * 2).round()});
+    await _put('/ratings/$mediaId', {'value': value.round()});
   }
 
   Future<Map<int, double>> ratingDistribution(String mediaId) async {
@@ -151,7 +167,7 @@ class BackendService implements MovieService {
     final distribution =
         response['distribution'] as Map<String, dynamic>? ?? {};
     return {
-      for (var value = 1; value <= 10; value++)
+      for (var value = 1; value <= 5; value++)
         value: (distribution['$value'] as num?)?.toDouble() ?? 0,
     };
   }
@@ -271,6 +287,8 @@ class BackendService implements MovieService {
   LocalUser _userFromJson(Map<String, dynamic> data) => LocalUser(
     id: data['id'] as String,
     name: data['name'] as String,
+    username: data['username'] as String? ??
+        (data['email'] as String).split('@').first,
     email: data['email'] as String,
     passwordHash: '',
     bio: data['bio'] as String? ?? '',

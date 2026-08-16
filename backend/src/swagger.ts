@@ -34,7 +34,8 @@ export const swaggerDocument = {
         required: ["email", "password"],
         properties: {
           email: { type: "string", format: "email", example: "user@example.com" },
-          password: { type: "string", minLength: 8, example: "StrongPass123!" }
+          password: { type: "string", minLength: 8, example: "StrongPass123!" },
+          sessionDays: { type: "integer", minimum: 1, maximum: 30, default: 30 }
         }
       },
       User: {
@@ -42,6 +43,7 @@ export const swaggerDocument = {
         properties: {
           id: { type: "string" },
           name: { type: "string" },
+          username: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           bio: { type: "string" },
           avatarUrl: { type: "string", format: "uri", nullable: true },
@@ -95,8 +97,13 @@ export const swaggerDocument = {
                   { $ref: "#/components/schemas/Credentials" },
                   {
                     type: "object",
-                    required: ["name"],
-                    properties: { name: { type: "string", example: "Alex" } }
+                    required: ["name", "username"],
+                    properties: {
+                      name: { type: "string", example: "Alex Smith" },
+                      username: { type: "string", example: "alex.smith" },
+                      bio: { type: "string", maxLength: 300 },
+                      avatarUrl: { type: "string", format: "uri", nullable: true }
+                    }
                   }
                 ]
               }
@@ -262,9 +269,8 @@ export const swaggerDocument = {
                 properties: {
                   status: {
                     type: "string",
-                    enum: ["PLANNED", "WATCHING", "COMPLETED", "DROPPED", "FAVORITE"]
-                  },
-                  watchedEpisodes: { type: "integer", minimum: 0 }
+                    enum: ["PLANNED", "WATCHING", "COMPLETED", "PAUSED", "DROPPED", "FAVORITE"]
+                  }
                 }
               }
             }
@@ -289,7 +295,7 @@ export const swaggerDocument = {
               schema: {
                 type: "object",
                 required: ["value"],
-                properties: { value: { type: "integer", minimum: 1, maximum: 10 } }
+                properties: { value: { type: "integer", minimum: 1, maximum: 5 } }
               }
             }
           }

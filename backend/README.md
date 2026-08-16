@@ -37,6 +37,7 @@ For CI or a hosting service, configure the variables from `.env.example` in the 
 
 Default seeded administrator:
 
+- Username: `admin`
 - Email: `admin@example.com`
 - Password: `Admin123!`
 

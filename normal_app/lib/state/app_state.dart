@@ -28,6 +28,7 @@ class AppState extends ChangeNotifier {
   final Map<String, Set<String>> customLists = {};
   final Map<String, String> remoteListIds = {};
   Timer? _searchTimer;
+  int _searchRequestId = 0;
 
   BackendService? get backend =>
       api is BackendService ? api as BackendService : null;
@@ -49,23 +50,49 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> register(String name, String email, String password) async {
+  Future<void> register({
+    required String name,
+    required String username,
+    required String email,
+    required String password,
+    String bio = '',
+    String? avatarPath,
+    int sessionDays = 30,
+  }) async {
     if (backend != null) {
-      user = await backend!.register(name.trim(), email.trim(), password);
+      user = await backend!.register(
+        name.trim(),
+        username.trim(),
+        email.trim(),
+        password,
+        bio: bio.trim(),
+        avatarUrl: avatarPath?.trim().isEmpty ?? true ? null : avatarPath!.trim(),
+        sessionDays: sessionDays,
+      );
     } else {
       final users = await store.users();
       final normalized = email.trim().toLowerCase();
+      final normalizedUsername = username.trim().toLowerCase();
+      if (!RegExp(r'^[a-zA-Z0-9_.]{3,30}$').hasMatch(username.trim())) {
+        throw StateError('نام کاربری باید ۳ تا ۳۰ نویسه و شامل حروف انگلیسی، عدد، . یا _ باشد.');
+      }
       if (users.any((item) => item.email == normalized)) {
         throw StateError('این ایمیل قبلاً ثبت شده است.');
+      }
+      if (users.any((item) => item.username.toLowerCase() == normalizedUsername)) {
+        throw StateError('این نام کاربری قبلاً ثبت شده است.');
       }
       user = LocalUser(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         name: name.trim(),
+        username: normalizedUsername,
         email: normalized,
         passwordHash: store.hashPassword(password),
+        bio: bio.trim(),
+        avatarPath: avatarPath?.trim().isEmpty ?? true ? null : avatarPath!.trim(),
       );
       await store.saveUsers([...users, user!]);
-      await store.saveSession(user!.id);
+      await store.saveSession(user!.id, days: sessionDays);
     }
     notifyListeners();
   }
@@ -80,21 +107,35 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(
+    String email,
+    String password, {
+    int sessionDays = 30,
+  }) async {
     if (backend != null) {
-      user = await backend!.login(email.trim(), password);
+      user = await backend!.login(
+        email.trim(),
+        password,
+        sessionDays: sessionDays,
+      );
     } else {
       final users = await store.users();
-      final hash = store.hashPassword(password);
       user = users
           .where(
             (item) =>
                 item.email == email.trim().toLowerCase() &&
-                item.passwordHash == hash,
+                store.verifyPassword(password, item.passwordHash),
           )
           .firstOrNull;
       if (user == null) throw StateError('ایمیل یا رمز عبور نادرست است.');
-      await store.saveSession(user!.id);
+      if (store.needsPasswordUpgrade(user!.passwordHash)) {
+        user = user!.copyWith(passwordHash: store.hashPassword(password));
+        await store.saveUsers([
+          for (final item in users)
+            if (item.id == user!.id) user! else item,
+        ]);
+      }
+      await store.saveSession(user!.id, days: sessionDays);
     }
     await _loadData();
     notifyListeners();
@@ -113,9 +154,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> requestPasswordReset(String email) async {
-    if (backend != null) {
-      await backend!.requestPasswordReset(email.trim());
+    if (backend == null) {
+      throw StateError(
+        'بازیابی امن رمز عبور فقط در حالت پیشرفته و از طریق ایمیل در دسترس است.',
+      );
     }
+    await backend!.requestPasswordReset(email.trim());
   }
 
   Future<void> resetPassword(
@@ -130,25 +174,9 @@ class AppState extends ChangeNotifier {
       await backend!.confirmPasswordReset(email.trim(), token, newPassword);
       return;
     }
-    final users = await store.users();
-    final normalized = email.trim().toLowerCase();
-    if (!users.any((item) => item.email == normalized)) {
-      throw StateError('حسابی با این ایمیل وجود ندارد.');
-    }
-    await store.saveUsers([
-      for (final item in users)
-        if (item.email == normalized)
-          LocalUser(
-            id: item.id,
-            name: item.name,
-            email: item.email,
-            passwordHash: store.hashPassword(newPassword),
-            bio: item.bio,
-            avatarPath: item.avatarPath,
-          )
-        else
-          item,
-    ]);
+    throw StateError(
+      'بازیابی امن رمز عبور در حالت عادی بدون سرویس ایمیل قابل انجام نیست.',
+    );
   }
 
   Future<void> updateProfile(String name, String bio) async {
@@ -169,7 +197,10 @@ class AppState extends ChangeNotifier {
   void debouncedSearch(String query) {
     _searchTimer?.cancel();
     if (query.trim().length < 2) {
+      _searchRequestId++;
       searchResults = [];
+      searchTotal = 0;
+      busy = false;
       notifyListeners();
       return;
     }
@@ -180,34 +211,36 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> search(String query, {int page = 1}) async {
+    final requestId = ++_searchRequestId;
     busy = true;
     error = null;
     notifyListeners();
     try {
       final result = await api.search(query.trim(), page: page);
+      if (requestId != _searchRequestId) return;
       searchResults = result.items;
       searchTotal = result.total;
       await store.cacheSearch(query, result.items);
     } on MovieServiceException catch (exception) {
       final cached = await store.cachedSearch(query);
+      if (requestId != _searchRequestId) return;
       searchResults = cached;
+      searchTotal = cached.length;
       error = cached.isEmpty
           ? exception.message
           : 'نتایج ذخیره‌شده نمایش داده می‌شوند.';
     } finally {
-      busy = false;
-      notifyListeners();
+      if (requestId == _searchRequestId) {
+        busy = false;
+        notifyListeners();
+      }
     }
   }
 
   Future<void> setWatchState(MediaSummary media, WatchState state) async {
+    await backend?.setWatchState(media.id, state);
     savedMedia[media.id] = media;
     watchStates[media.id] = state;
-    await backend?.setWatchState(
-      media.id,
-      state,
-      watchedEpisodes[media.id]?.length ?? 0,
-    );
     await _saveData();
     notifyListeners();
   }
@@ -226,30 +259,25 @@ class AppState extends ChangeNotifier {
     int season,
     int episode,
   ) async {
+    final key = '$season:$episode';
+    final watched = !(watchedEpisodes[media.id]?.contains(key) ?? false);
+    await backend?.setEpisode(media.id, season, episode, watched);
     savedMedia[media.id] = media;
     final episodes = watchedEpisodes.putIfAbsent(media.id, () => <String>{});
-    final key = '$season:$episode';
-    final watched = !episodes.contains(key);
-    await backend?.setEpisode(media.id, season, episode, watched);
     if (watched) {
       episodes.add(key);
     } else {
       episodes.remove(key);
     }
     watchStates[media.id] = WatchState.watching;
-    await backend?.setWatchState(
-      media.id,
-      WatchState.watching,
-      episodes.length,
-    );
     await _saveData();
     notifyListeners();
   }
 
   Future<void> rate(MediaSummary media, double value) async {
+    await backend?.rate(media.id, value);
     savedMedia[media.id] = media;
     ratings[media.id] = value;
-    await backend?.rate(media.id, value);
     await _saveData();
     notifyListeners();
   }
@@ -298,8 +326,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> createList(String name) async {
     final normalized = name.trim();
-    customLists.putIfAbsent(normalized, () => <String>{});
     final remoteId = await backend?.createList(normalized);
+    customLists.putIfAbsent(normalized, () => <String>{});
     if (remoteId != null) remoteListIds[normalized] = remoteId;
     await _saveData();
     notifyListeners();
@@ -315,10 +343,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> addToList(String name, MediaSummary media) async {
-    savedMedia[media.id] = media;
-    customLists.putIfAbsent(name, () => <String>{}).add(media.id);
     final remoteId = remoteListIds[name];
     if (remoteId != null) await backend?.addToList(remoteId, media.id);
+    savedMedia[media.id] = media;
+    customLists.putIfAbsent(name, () => <String>{}).add(media.id);
     await _saveData();
     notifyListeners();
   }
@@ -408,9 +436,10 @@ class AppState extends ChangeNotifier {
         };
       }
     });
-    (data['ratings'] as Map<String, dynamic>? ?? {}).forEach(
-      (id, value) => ratings[id] = (value as num).toDouble(),
-    );
+    (data['ratings'] as Map<String, dynamic>? ?? {}).forEach((id, value) {
+      final raw = (value as num).toDouble();
+      if (raw >= 1) ratings[id] = raw.round().clamp(1, 5).toDouble();
+    });
     reviews.addAll(
       (data['reviews'] as List<dynamic>? ?? [])
           .cast<Map<String, dynamic>>()
@@ -434,20 +463,18 @@ class AppState extends ChangeNotifier {
       watchStates[media.id] = switch (row['status'] as String) {
         'WATCHING' => WatchState.watching,
         'COMPLETED' => WatchState.completed,
+        'PAUSED' => WatchState.paused,
         'DROPPED' => WatchState.dropped,
         'FAVORITE' => WatchState.favorite,
         _ => WatchState.planned,
       };
-      final count = row['watchedEpisodes'] as int? ?? 0;
-      watchedEpisodes[media.id] = {
-        for (var episode = 1; episode <= count; episode++) '1:$episode',
-      };
+      watchedEpisodes.remove(media.id);
     }
     for (final item in (data['ratings'] as List<dynamic>? ?? [])) {
       final row = item as Map<String, dynamic>;
       final media = MediaSummary.fromJson(row['media'] as Map<String, dynamic>);
       savedMedia[media.id] = media;
-      ratings[media.id] = (row['value'] as num).toDouble() / 2;
+      ratings[media.id] = (row['value'] as num).toDouble();
     }
     final existingReviewIds = reviews.map((review) => review.id).toSet();
     for (final item in (data['comments'] as List<dynamic>? ?? [])) {
@@ -516,5 +543,11 @@ class AppState extends ChangeNotifier {
     publicReviews.clear();
     customLists.clear();
     remoteListIds.clear();
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    super.dispose();
   }
 }

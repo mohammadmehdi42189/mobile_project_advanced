@@ -17,6 +17,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   String? error;
   int selectedSeason = 1;
   List<Episode> episodes = [];
+  double? ratingDraft;
 
   @override
   void initState() {
@@ -61,6 +62,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
     final media = details!;
     final state = context.watch<AppState>();
+    final savedRating = state.ratings[media.id];
+    final shownRating = (ratingDraft ?? savedRating ?? 1).clamp(1, 5).toDouble();
     return Scaffold(
       appBar: AppBar(title: Text(media.title)),
       body: ListView(
@@ -152,15 +155,30 @@ class _DetailsScreenState extends State<DetailsScreen> {
           Text('کشور سازنده: ${media.country ?? '-'}'),
           const Divider(height: 32),
           Text('امتیاز شما', style: Theme.of(context).textTheme.titleMedium),
+          Text(savedRating == null && ratingDraft == null ? 'ثبت نشده' : '${shownRating.round()} از ۵'),
           Slider(
-            value: state.ratings[media.id] ?? 0,
-            min: 0,
+            value: shownRating,
+            min: 1,
             max: 5,
-            divisions: 10,
-            label: '${state.ratings[media.id] ?? 0}',
+            divisions: 4,
+            label: '${shownRating.round()}',
             onChanged: state.user == null
                 ? null
-                : (value) => state.rate(media, value),
+                : (value) => setState(() => ratingDraft = value),
+            onChangeEnd: state.user == null
+                ? null
+                : (value) async {
+                    try {
+                      await state.rate(media, value.roundToDouble());
+                      if (mounted) setState(() => ratingDraft = null);
+                    } catch (exception) {
+                      if (!mounted) return;
+                      setState(() => ratingDraft = null);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(exception.toString())),
+                      );
+                    }
+                  },
           ),
           FutureBuilder<Map<int, double>>(
             future: state.ratingDistribution(media.id),
@@ -173,7 +191,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     .map(
                       (entry) => ListTile(
                         dense: true,
-                        title: Text('${entry.key / 2} از ۵'),
+                        title: Text('${entry.key} از ۵'),
                         trailing: Text('${entry.value.toStringAsFixed(1)}٪'),
                       ),
                     )

@@ -21,6 +21,9 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
     }
+    final avatarUri = Uri.tryParse(user.avatarPath ?? '');
+    final hasNetworkAvatar = avatarUri != null &&
+        (avatarUri.scheme == 'http' || avatarUri.scheme == 'https');
     return Scaffold(
       appBar: AppBar(
         title: const Text('پروفایل'),
@@ -31,13 +34,22 @@ class ProfileScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const CircleAvatar(radius: 46, child: Icon(Icons.person, size: 50)),
+          CircleAvatar(
+            radius: 46,
+            backgroundImage: hasNetworkAvatar
+                ? NetworkImage(user.avatarPath!)
+                : null,
+            child: !hasNetworkAvatar
+                ? const Icon(Icons.person, size: 50)
+                : null,
+          ),
           const SizedBox(height: 12),
           Text(
             user.name,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
+          Text('@${user.username}', textAlign: TextAlign.center),
           Text(user.email, textAlign: TextAlign.center),
           if (user.bio.isNotEmpty) Text(user.bio, textAlign: TextAlign.center),
           const SizedBox(height: 24),

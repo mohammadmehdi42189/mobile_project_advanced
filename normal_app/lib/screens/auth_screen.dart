@@ -11,16 +11,33 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final name = TextEditingController();
+  final username = TextEditingController();
+  final bio = TextEditingController();
+  final avatarUrl = TextEditingController();
   final email = TextEditingController();
   final password = TextEditingController();
   bool register = false;
   bool busy = false;
+  int sessionDays = 30;
   String? error;
+
+  @override
+  void dispose() {
+    name.dispose();
+    username.dispose();
+    bio.dispose();
+    avatarUrl.dispose();
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
 
   Future<void> submit() async {
     if (email.text.trim().isEmpty ||
         password.text.length < 8 ||
-        (register && name.text.trim().length < 2)) {
+        (register && name.text.trim().length < 2) ||
+        (register &&
+            !RegExp(r'^[a-zA-Z0-9_.]{3,30}$').hasMatch(username.text.trim()))) {
       setState(() => error = 'اطلاعات فرم را کامل و معتبر وارد کنید.');
       return;
     }
@@ -31,9 +48,21 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final state = context.read<AppState>();
       if (register) {
-        await state.register(name.text, email.text, password.text);
+        await state.register(
+          name: name.text,
+          username: username.text,
+          email: email.text,
+          password: password.text,
+          bio: bio.text,
+          avatarPath: avatarUrl.text,
+          sessionDays: sessionDays,
+        );
       } else {
-        await state.login(email.text, password.text);
+        await state.login(
+          email.text,
+          password.text,
+          sessionDays: sessionDays,
+        );
       }
     } catch (exception) {
       setState(
@@ -70,7 +99,17 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextField(
                         controller: name,
                         decoration: const InputDecoration(
+                          labelText: 'نام و نام خانوادگی',
+                        ),
+                      ),
+                    if (register) const SizedBox(height: 12),
+                    if (register)
+                      TextField(
+                        controller: username,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
                           labelText: 'نام کاربری',
+                          helperText: '۳ تا ۳۰ نویسه: حروف انگلیسی، عدد، . و _',
                         ),
                       ),
                     if (register) const SizedBox(height: 12),
@@ -84,6 +123,40 @@ class _AuthScreenState extends State<AuthScreen> {
                       controller: password,
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'رمز عبور'),
+                    ),
+                    if (register) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: bio,
+                        maxLength: 300,
+                        decoration: const InputDecoration(
+                          labelText: 'درباره من (اختیاری)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: avatarUrl,
+                        keyboardType: TextInputType.url,
+                        textDirection: TextDirection.ltr,
+                        decoration: const InputDecoration(
+                          labelText: 'آدرس تصویر پروفایل (اختیاری)',
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      value: sessionDays,
+                      decoration: const InputDecoration(
+                        labelText: 'مدت فعال ماندن ورود',
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('۱ روز')),
+                        DropdownMenuItem(value: 7, child: Text('۷ روز')),
+                        DropdownMenuItem(value: 30, child: Text('۳۰ روز')),
+                      ],
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => sessionDays = value ?? 30),
                     ),
                     if (error != null) ...[
                       const SizedBox(height: 12),
@@ -108,7 +181,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       onPressed: () => setState(() => register = !register),
                       child: Text(register ? 'حساب دارم' : 'ساخت حساب جدید'),
                     ),
-                    if (!register)
+                    if (!register && AppConfig.advancedMode)
                       TextButton(
                         onPressed: () => _resetPassword(context),
                         child: const Text('بازیابی رمز عبور'),

@@ -14,6 +14,7 @@ class LocalUser {
   const LocalUser({
     required this.id,
     required this.name,
+    required this.username,
     required this.email,
     required this.passwordHash,
     this.bio = '',
@@ -22,6 +23,7 @@ class LocalUser {
 
   final String id;
   final String name;
+  final String username;
   final String email;
   final String passwordHash;
   final String bio;
@@ -30,6 +32,8 @@ class LocalUser {
   factory LocalUser.fromJson(Map<String, dynamic> json) => LocalUser(
     id: json['id'] as String,
     name: json['name'] as String,
+    username: json['username'] as String? ??
+        (json['email'] as String).split('@').first,
     email: json['email'] as String,
     passwordHash: json['passwordHash'] as String,
     bio: json['bio'] as String? ?? '',
@@ -39,18 +43,26 @@ class LocalUser {
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
+    'username': username,
     'email': email,
     'passwordHash': passwordHash,
     'bio': bio,
     'avatarPath': avatarPath,
   };
 
-  LocalUser copyWith({String? name, String? bio, String? avatarPath}) =>
+  LocalUser copyWith({
+    String? name,
+    String? username,
+    String? passwordHash,
+    String? bio,
+    String? avatarPath,
+  }) =>
       LocalUser(
         id: id,
         name: name ?? this.name,
+        username: username ?? this.username,
         email: email,
-        passwordHash: passwordHash,
+        passwordHash: passwordHash ?? this.passwordHash,
         bio: bio ?? this.bio,
         avatarPath: avatarPath ?? this.avatarPath,
       );

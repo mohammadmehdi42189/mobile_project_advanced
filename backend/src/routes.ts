@@ -13,30 +13,53 @@ export const routes = Router();
 
 const credentials = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(72)
+  password: z.string().min(8).max(72),
+  sessionDays: z.number().int().min(1).max(30).default(30)
 });
 
+const usernameSchema = z.string()
+  .trim()
+  .min(3)
+  .max(30)
+  .regex(/^[a-zA-Z0-9_.]+$/, "Username may only contain letters, numbers, dots and underscores");
+
 routes.post("/auth/register", async (req, res) => {
-  const body = credentials.extend({ name: z.string().trim().min(2).max(60) }).parse(req.body);
+  const body = credentials.extend({
+    name: z.string().trim().min(2).max(60),
+    username: usernameSchema,
+    bio: z.string().trim().max(300).default(""),
+    avatarUrl: z.string().url().nullable().optional()
+  }).parse(req.body);
   if (await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } })) {
     throw new AppError(409, "Email is already registered");
+  }
+  const username = body.username.toLowerCase();
+  if (await prisma.user.findUnique({ where: { username } })) {
+    throw new AppError(409, "Username is already registered");
   }
   const user = await prisma.user.create({
     data: {
       email: body.email.toLowerCase(),
+      username,
       name: body.name,
+      bio: body.bio,
+      avatarUrl: body.avatarUrl,
       passwordHash: await bcrypt.hash(body.password, 12)
     },
     select: {
       id: true,
       email: true,
+      username: true,
       name: true,
       bio: true,
       avatarUrl: true,
       role: true
     }
   });
-  res.status(201).json({ user, token: createToken({ id: user.id, role: user.role }) });
+  res.status(201).json({
+    user,
+    token: createToken({ id: user.id, role: user.role }, body.sessionDays)
+  });
 });
 
 routes.post("/auth/login", async (req, res) => {
@@ -49,12 +72,13 @@ routes.post("/auth/login", async (req, res) => {
     user: {
       id: user.id,
       email: user.email,
+      username: user.username,
       name: user.name,
       bio: user.bio,
       avatarUrl: user.avatarUrl,
       role: user.role
     },
-    token: createToken({ id: user.id, role: user.role })
+    token: createToken({ id: user.id, role: user.role }, body.sessionDays)
   });
 });
 
@@ -107,6 +131,7 @@ routes.get("/profile", requireAuth, async (req, res) => {
     select: {
       id: true,
       email: true,
+      username: true,
       name: true,
       bio: true,
       avatarUrl: true,
@@ -129,6 +154,7 @@ routes.patch("/profile", requireAuth, async (req, res) => {
     select: {
       id: true,
       email: true,
+      username: true,
       name: true,
       bio: true,
       avatarUrl: true,
@@ -161,14 +187,16 @@ routes.get("/media/:id/seasons/:season", async (req, res) => {
 routes.put("/watchlist/:mediaId", requireAuth, async (req, res) => {
   const mediaId = z.string().regex(/^tt\d+$/).parse(req.params.mediaId);
   const body = z.object({
-    status: z.nativeEnum(WatchStatus),
-    watchedEpisodes: z.number().int().min(0).default(0)
+    status: z.nativeEnum(WatchStatus)
   }).parse(req.body);
   await findMedia(mediaId);
+  const watchedEpisodes = await prisma.episodeProgress.count({
+    where: { userId: req.user!.id, mediaId }
+  });
   const item = await prisma.watchItem.upsert({
     where: { userId_mediaId: { userId: req.user!.id, mediaId } },
-    update: body,
-    create: { userId: req.user!.id, mediaId, ...body },
+    update: { ...body, watchedEpisodes },
+    create: { userId: req.user!.id, mediaId, ...body, watchedEpisodes },
     include: { media: true }
   });
   res.json(item);
@@ -199,48 +227,93 @@ routes.put("/episodes/:mediaId/:season/:episode", requireAuth, async (req, res) 
   const mediaId = z.string().regex(/^tt\d+$/).parse(req.params.mediaId);
   const season = z.coerce.number().int().min(1).parse(req.params.season);
   const episode = z.coerce.number().int().min(1).parse(req.params.episode);
-  await findMedia(mediaId);
-  res.json(await prisma.episodeProgress.upsert({
-    where: {
-      userId_mediaId_season_episode: {
+  await validateEpisode(mediaId, season, episode);
+  const result = await prisma.$transaction(async transaction => {
+    const progress = await transaction.episodeProgress.upsert({
+      where: {
+        userId_mediaId_season_episode: {
+          userId: req.user!.id,
+          mediaId,
+          season,
+          episode
+        }
+      },
+      update: { watchedAt: new Date() },
+      create: { userId: req.user!.id, mediaId, season, episode }
+    });
+    const watchedEpisodes = await transaction.episodeProgress.count({
+      where: { userId: req.user!.id, mediaId }
+    });
+    await transaction.watchItem.upsert({
+      where: { userId_mediaId: { userId: req.user!.id, mediaId } },
+      update: { status: WatchStatus.WATCHING, watchedEpisodes },
+      create: {
         userId: req.user!.id,
         mediaId,
-        season,
-        episode
+        status: WatchStatus.WATCHING,
+        watchedEpisodes
       }
-    },
-    update: { watchedAt: new Date() },
-    create: { userId: req.user!.id, mediaId, season, episode }
-  }));
+    });
+    return progress;
+  });
+  res.json(result);
 });
 
 routes.delete("/episodes/:mediaId/:season/:episode", requireAuth, async (req, res) => {
   const mediaId = z.string().regex(/^tt\d+$/).parse(req.params.mediaId);
   const season = z.coerce.number().int().min(1).parse(req.params.season);
   const episode = z.coerce.number().int().min(1).parse(req.params.episode);
-  await prisma.episodeProgress.deleteMany({
-    where: { userId: req.user!.id, mediaId, season, episode }
+  await prisma.$transaction(async transaction => {
+    await transaction.episodeProgress.deleteMany({
+      where: { userId: req.user!.id, mediaId, season, episode }
+    });
+    const watchedEpisodes = await transaction.episodeProgress.count({
+      where: { userId: req.user!.id, mediaId }
+    });
+    await transaction.watchItem.updateMany({
+      where: { userId: req.user!.id, mediaId },
+      data: { watchedEpisodes }
+    });
   });
   res.status(204).end();
 });
 
+async function validateEpisode(mediaId: string, season: number, episode: number) {
+  const media = await findMedia(mediaId);
+  if (media.type !== "series") {
+    throw new AppError(400, "Episode progress is only available for series");
+  }
+  if (media.totalSeasons && season > media.totalSeasons) {
+    throw new AppError(400, "Season does not exist for this series");
+  }
+  const seasonData = await findSeason(mediaId, season);
+  if (!seasonData.episodes.some(item => item.episode === episode)) {
+    throw new AppError(400, "Episode does not exist in this season");
+  }
+}
+
 routes.put("/ratings/:mediaId", requireAuth, async (req, res) => {
   const mediaId = z.string().regex(/^tt\d+$/).parse(req.params.mediaId);
-  const { value } = z.object({ value: z.number().int().min(1).max(10) }).parse(req.body);
+  const { value } = z.object({ value: z.number().int().min(1).max(5) }).parse(req.body);
   await findMedia(mediaId);
-  res.json(await prisma.rating.upsert({
+  const rating = await prisma.rating.upsert({
     where: { userId_mediaId: { userId: req.user!.id, mediaId } },
-    update: { value },
-    create: { userId: req.user!.id, mediaId, value }
-  }));
+    update: { value: value * 2 },
+    create: { userId: req.user!.id, mediaId, value: value * 2 }
+  });
+  res.json({ ...rating, value });
 });
 
 routes.get("/ratings", requireAuth, async (req, res) => {
-  res.json(await prisma.rating.findMany({
+  const ratings = await prisma.rating.findMany({
     where: { userId: req.user!.id },
     include: { media: true },
     orderBy: { updatedAt: "desc" }
-  }));
+  });
+  res.json(ratings.map(item => ({
+    ...item,
+    value: Math.round(item.value / 2)
+  })));
 });
 
 routes.get("/media/:mediaId/ratings", async (req, res) => {
@@ -250,13 +323,22 @@ routes.get("/media/:mediaId/ratings", async (req, res) => {
     where: { mediaId },
     _count: { value: true }
   });
-  const total = ratings.reduce((sum, item) => sum + item._count.value, 0);
+  const normalizedCounts = new Map<number, number>();
+  for (const item of ratings) {
+    const normalizedValue = Math.round(item.value / 2);
+    if (normalizedValue < 1 || normalizedValue > 5) continue;
+    normalizedCounts.set(
+      normalizedValue,
+      (normalizedCounts.get(normalizedValue) ?? 0) + item._count.value
+    );
+  }
+  const total = [...normalizedCounts.values()].reduce((sum, count) => sum + count, 0);
   res.json({
     total,
     distribution: Object.fromEntries(
-      Array.from({ length: 10 }, (_, index) => {
+      Array.from({ length: 5 }, (_, index) => {
         const value = index + 1;
-        const count = ratings.find(item => item.value === value)?._count.value ?? 0;
+        const count = normalizedCounts.get(value) ?? 0;
         return [value, total ? Math.round(count * 10000 / total) / 100 : 0];
       })
     )
@@ -344,7 +426,7 @@ routes.get("/activities", requireAuth, async (req, res) => {
     watchedEpisodes,
     totalWatchMinutes,
     favoriteGenre,
-    averageRating: ratings._avg.value ?? 0
+    averageRating: (ratings._avg.value ?? 0) / 2
   });
 });
 
